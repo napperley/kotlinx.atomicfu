@@ -297,7 +297,7 @@ jvmTest.dependsOn jvmTestAll
 
 afterEvaluate {
     publishing.publications {
-        metadata.artifactId = 'atomicfu-common'
+        //metadata.artifactId = 'atomicfu-common'
 
         kotlinMultiplatform {
             apply from: "$rootDir/gradle/publish-mpp-root-module-in-platform.gradle"
