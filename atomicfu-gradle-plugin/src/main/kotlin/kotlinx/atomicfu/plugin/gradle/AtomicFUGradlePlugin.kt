@@ -30,6 +30,7 @@ open class AtomicFUGradlePlugin : Plugin<Project> {
         val pluginVersion = rootProject.buildscript.configurations.findByName("classpath")
             ?.allDependencies?.find { it.name == "atomicfu-gradle-plugin" }?.version
         extensions.add(EXTENSION_NAME, AtomicFUPluginExtension(pluginVersion))
+        println("Atomicfu Gradle Plugin applied, pluginVersion = $pluginVersion")
         configureDependencies()
         configureTasks()
     }
@@ -43,7 +44,7 @@ private fun Project.configureDependencies() {
         )
         dependencies.add(TEST_IMPLEMENTATION_CONFIGURATION, getAtomicfuDependencyNotation(Platform.JVM, version))
     }
-    withPluginWhenEvaluatedDependencies("kotlin2js") { version ->
+    withPluginWhenEvaluatedDependencies("org.jetbrains.kotlin.js") { version ->
         dependencies.add(
             if (config.transformJs) COMPILE_ONLY_CONFIGURATION else IMPLEMENTATION_CONFIGURATION,
             getAtomicfuDependencyNotation(Platform.JS, version)
@@ -51,6 +52,9 @@ private fun Project.configureDependencies() {
         dependencies.add(TEST_IMPLEMENTATION_CONFIGURATION, getAtomicfuDependencyNotation(Platform.JS, version))
     }
     withPluginWhenEvaluatedDependencies("kotlin-multiplatform") { version ->
+        configureMultiplatformPluginDependencies(version)
+    }
+    withPluginWhenEvaluatedDependencies("kotlin-android") { version ->
         configureMultiplatformPluginDependencies(version)
     }
 }
@@ -94,11 +98,12 @@ private enum class Platform(val suffix: String) {
     MULTIPLATFORM("")
 }
 
-private enum class CompilationType { MAIN, TEST }
+private enum class CompilationType { MAIN, TEST, RELEASE }
 
 private fun String.compilationNameToType(): CompilationType? = when (this) {
     KotlinCompilation.MAIN_COMPILATION_NAME -> CompilationType.MAIN
     KotlinCompilation.TEST_COMPILATION_NAME -> CompilationType.TEST
+    "release" -> CompilationType.RELEASE
     else -> null
 }
 
@@ -120,12 +125,16 @@ fun <T> Project.whenEvaluated(fn: Project.() -> T) {
     if (state.executed) {
         fn()
     } else {
-        afterEvaluate { fn() }
+        afterEvaluate {
+            fn()
+        }
     }
 }
 
 fun Project.withPluginWhenEvaluated(plugin: String, fn: Project.() -> Unit) {
-    pluginManager.withPlugin(plugin) { whenEvaluated(fn) }
+    pluginManager.withPlugin(plugin) {
+        whenEvaluated(fn)
+    }
 }
 
 fun Project.withPluginWhenEvaluatedDependencies(plugin: String, fn: Project.(version: String) -> Unit) {
@@ -171,7 +180,7 @@ fun Project.configureMultiplatformPluginTasks() {
             val transformedClassesDir =
                 project.buildDir.resolve("classes/atomicfu/${target.name}/${compilation.name}")
             val transformTask = when (target.platformType) {
-                KotlinPlatformType.jvm, KotlinPlatformType.androidJvm -> {
+                KotlinPlatformType.jvm -> {
                     if (!config.transformJvm) return@compilations // skip when transformation is turned off
                     project.createJvmTransformTask(compilation).configureJvmTask(
                         compilation.compileDependencyFiles,
@@ -179,6 +188,14 @@ fun Project.configureMultiplatformPluginTasks() {
                         transformedClassesDir,
                         originalClassesDirs,
                         config
+                    )
+                }
+                KotlinPlatformType.androidJvm -> {
+                    project.createJvmTransformTask(compilation).configureAndroidJvmTask(
+                            compilation.compileDependencyFiles,
+                            classesDirs, // saved as @InputFiles
+                            transformedClassesDir,
+                            config
                     )
                 }
                 KotlinPlatformType.js -> {
@@ -194,7 +211,9 @@ fun Project.configureMultiplatformPluginTasks() {
             }
             //now transformTask is responsible for compiling this source set into the classes directory
             classesDirs.setFrom(transformedClassesDir)
-            classesDirs.builtBy(transformTask)
+            if (target.platformType != KotlinPlatformType.androidJvm) {
+                classesDirs.builtBy(transformTask)
+            }
             (tasks.findByName(target.artifactsTaskName) as? Jar)?.apply {
                 setupJarManifest(multiRelease = config.variant.toVariant() == Variant.BOTH)
             }
@@ -239,12 +258,10 @@ fun Project.configureMultiplatformPluginDependencies(version: String) {
                 .getByName(KotlinSourceSet.COMMON_MAIN_SOURCE_SET_NAME)
                 .compileOnlyConfigurationName
         dependencies.add(mainConfigurationName, getAtomicfuDependencyNotation(Platform.MULTIPLATFORM, version))
-
         val testConfigurationName = project.extensions.getByType(KotlinMultiplatformExtension::class.java).sourceSets
                 .getByName(KotlinSourceSet.COMMON_TEST_SOURCE_SET_NAME)
                 .implementationConfigurationName
         dependencies.add(testConfigurationName, getAtomicfuDependencyNotation(Platform.MULTIPLATFORM, version))
-
         // For each source set that is only used in Native compilations, add an implementation dependency so that it
         // gets published and is properly consumed as a transitive dependency:
         sourceSetsByCompilation().forEach { (sourceSet, compilations) ->
@@ -350,6 +367,20 @@ fun Project.createJvmTransformTask(sourceSet: SourceSet): AtomicFUTransformTask 
 
 fun Project.createJsTransformTask(sourceSet: SourceSet): AtomicFUTransformJsTask =
     tasks.create(sourceSet.getTaskName("transform", "atomicfuJsFiles"), AtomicFUTransformJsTask::class.java)
+
+fun AtomicFUTransformTask.configureAndroidJvmTask(
+        classpath: FileCollection,
+        compilationOutput: FileCollection,
+        transformedClassesDir: File,
+        config: AtomicFUPluginExtension
+): ConventionTask =
+        apply {
+            classPath = classpath
+            inputFiles = compilationOutput
+            outputDir = transformedClassesDir
+            variant = config.variant
+            verbose = config.verbose
+        }
 
 fun AtomicFUTransformTask.configureJvmTask(
     classpath: FileCollection,
