@@ -193,7 +193,7 @@ fun Project.configureMultiplatformPluginTasks() {
                 KotlinPlatformType.androidJvm -> {
                     project.createJvmTransformTask(compilation).configureAndroidJvmTask(
                             compilation.compileDependencyFiles,
-                            classesDirs, // saved as @InputFiles
+                            originalClassesDirs, // saved as @InputFiles
                             transformedClassesDir,
                             config
                     )
@@ -211,9 +211,7 @@ fun Project.configureMultiplatformPluginTasks() {
             }
             //now transformTask is responsible for compiling this source set into the classes directory
             classesDirs.setFrom(transformedClassesDir)
-            if (target.platformType != KotlinPlatformType.androidJvm) {
-                classesDirs.builtBy(transformTask)
-            }
+            classesDirs.builtBy(transformTask)
             (tasks.findByName(target.artifactsTaskName) as? Jar)?.apply {
                 setupJarManifest(multiRelease = config.variant.toVariant() == Variant.BOTH)
             }
