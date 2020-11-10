@@ -191,12 +191,14 @@ fun Project.configureMultiplatformPluginTasks() {
                     )
                 }
                 KotlinPlatformType.androidJvm -> {
-                    project.createJvmTransformTask(compilation).configureAndroidJvmTask(
-                            compilation.compileDependencyFiles,
-                            originalClassesDirs, // saved as @InputFiles
-                            transformedClassesDir,
-                            config
-                    )
+                    tasks.create(
+                            "testAtomicfuTask",
+                            TestAndroidTransformationTask::class.java
+                    ).apply {
+                        inputClassesDirs = originalClassesDirs
+                        inputDependencies = compilation.compileDependencyFiles
+                        outputDir = transformedClassesDir
+                    }
                 }
                 KotlinPlatformType.js -> {
                     if (!config.transformJs) return@compilations // skip when transformation is turned off
@@ -237,6 +239,26 @@ fun Project.configureMultiplatformPluginTasks() {
         }
     }
 }
+
+open class TestAndroidTransformationTask : DefaultTask() {
+
+    @InputFiles
+    @PathSensitive(PathSensitivity.RELATIVE)
+    lateinit var inputClassesDirs: FileCollection
+
+    @InputFiles
+    @PathSensitive(PathSensitivity.RELATIVE)
+    lateinit var inputDependencies: FileCollection
+
+    @OutputDirectory
+    lateinit var outputDir: File
+
+    @TaskAction
+    fun generate() {
+        println("TestAndroidTransformationTask APPLIED")
+    }
+}
+
 
 fun Project.sourceSetsByCompilation(): Map<KotlinSourceSet, List<KotlinCompilation<*>>> {
     val sourceSetsByCompilation = hashMapOf<KotlinSourceSet, MutableList<KotlinCompilation<*>>>()
