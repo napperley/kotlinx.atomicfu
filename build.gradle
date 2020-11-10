@@ -27,7 +27,7 @@ buildscript {
     }
 
     repositories {
-        jcenter()
+        mavenCentral()
         maven { url "https://plugins.gradle.org/m2/" }
         maven { url "https://maven.pkg.jetbrains.space/kotlin/p/kotlin/dev" }
     }
@@ -51,7 +51,7 @@ allprojects {
 
     println "Using Kotlin $kotlin_version for project $it"
     repositories {
-        jcenter()
+        mavenCentral()
         maven { url "https://maven.pkg.jetbrains.space/kotlin/p/kotlin/dev" }
     }
 
