@@ -1,0 +1,111 @@
+/*
+ * Copyright 2017-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license.
+ */
+
+// Configures publishing of Maven artifacts to Bintray
+
+apply plugin: 'maven'
+apply plugin: 'maven-publish'
+apply from: project.rootProject.file('gradle/maven-central.gradle')
+
+// todo: figure out how we can check it in a generic way
+def isMultiplatform = project.name == 'atomicfu'
+
+if (!isMultiplatform) {
+    // Regular java modules need 'java-library' plugin for proper publication
+    apply plugin: 'java-library'
+
+    // MPP projects pack their sources automtically, java libraries need to explicitly pack them
+    task sourcesJar(type: Jar) {
+        //noinspection GroovyAssignabilityCheck
+        archiveClassifier.set('sources')
+        from "src/main/kotlin"
+    }
+}
+
+// empty xxx-javadoc.jar
+task javadocJar(type: Jar) {
+    //noinspection GroovyAssignabilityCheck
+    archiveClassifier.set('javadoc')
+}
+
+// TODO: Resolve issue with the publishing block not being exposed (visible) after applying the maven-publish plugin.
+publishing {
+    repositories {
+        maven {
+            BintraySettings settings = fetchBintraySettings()
+            Integer publish = 0
+            Integer override = 0
+            if (settings.publishingEnabled) publish = 1
+            if (settings.override) override = 1
+            String name = 'kotlinx.atomicfu'
+            String baseUrl = 'https://api.bintray.com/maven'
+            url = "$baseUrl/${settings.user}/${settings.repo}/$name/;publish=$publish;override=$override"
+
+            credentials {
+                if (settings.user != "") username = settings.user else username = System.getenv('BINTRAY_USER')
+                if (settings.apiKey != "") password = settings.apiKey else password = System.getenv('BINTRAY_API_KEY')
+            }
+        }
+    }
+
+    if (!isMultiplatform) {
+        // Configure java publications for non-MPP projects
+        publications {
+            // plugin configures its own publication pluginMaven
+            if (project.name == 'atomicfu-gradle-plugin') {
+                pluginMaven(MavenPublication) {
+                    artifact sourcesJar
+                }
+            } else {
+                maven(MavenPublication) {
+                    from components.java
+                    artifact sourcesJar
+
+                    if (project.name.endsWith("-maven-plugin")) {
+                        pom.packaging = 'maven-plugin'
+                    }
+                }
+            }
+        }
+    }
+
+    publications.all {
+        pom.withXml(configureMavenCentralMetadata)
+
+        // add empty javadocs
+        if (it.name != "kotlinMultiplatform") { // The root module gets the JVM's javadoc JAR
+            it.artifact(javadocJar)
+        }
+    }
+}
+
+// ---- Bintray Settings ----
+class BintraySettings {
+    String user = ""
+    String apiKey = ""
+    String org = ""
+    String repo = ""
+    Boolean publishingEnabled = false
+    Boolean override = false
+}
+
+BintraySettings fetchBintraySettings() {
+    String filePath = "bintray.properties"
+    Properties properties = Properties()
+    BintraySettings result = BintraySettings()
+
+    if (file(filePath).exists()) {
+        File file = file(filePath)
+        BufferedReader br = BufferedReader(FileReader(file))
+        properties.load(br)
+        result.user = properties.getProperty("user") ?: ""
+        result.apiKey = properties.getProperty("apiKey") ?: ""
+        result.org = properties.getProperty("org") ?: ""
+        result.repo = properties.getProperty("repo") ?: ""
+        result.publishingEnabled = properties.getProperty("publishingEnabled")?.toBoolean() ?: true
+        result.override = properties.getProperty("override")?.toBoolean() ?: true
+        br.close()
+    }
+    return result
+}
