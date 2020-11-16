@@ -1,25 +1,22 @@
-/*
- * Copyright 2017-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license.
- */
+plugins {
+    id 'maven'
+    id 'maven-publish'
+}
 
-// Configures publishing of Maven artifacts to Bintray
-
-apply plugin: 'maven'
-apply plugin: 'maven-publish'
-apply from: project.rootProject.file('gradle/maven-central.gradle')
-
+apply from: "${rootProject.projectDir}/gradle/maven-central.gradle".replace("buildSrc", "")
 // todo: figure out how we can check it in a generic way
-def isMultiplatform = project.name == 'atomicfu'
+Boolean isMultiplatform = project.name == 'atomicfu'
+BintraySettings settings = fetchBintraySettings()
 
 if (!isMultiplatform) {
-    // Regular java modules need 'java-library' plugin for proper publication
+    // Regular java modules need 'java-library' plugin for proper publication.
     apply plugin: 'java-library'
 
-    // MPP projects pack their sources automtically, java libraries need to explicitly pack them
+    // MPP projects pack their sources automatically. Java libraries need to explicitly pack them.
     task sourcesJar(type: Jar) {
         //noinspection GroovyAssignabilityCheck
         archiveClassifier.set('sources')
-        from "src/main/kotlin"
+        from 'src/main/kotlin'
     }
 }
 
@@ -29,11 +26,9 @@ task javadocJar(type: Jar) {
     archiveClassifier.set('javadoc')
 }
 
-// TODO: Resolve issue with the publishing block not being exposed (visible) after applying the maven-publish plugin.
 publishing {
     repositories {
         maven {
-            BintraySettings settings = fetchBintraySettings()
             Integer publish = 0
             Integer override = 0
             if (settings.publishingEnabled) publish = 1
@@ -43,7 +38,7 @@ publishing {
             url = "$baseUrl/${settings.user}/${settings.repo}/$name/;publish=$publish;override=$override"
 
             credentials {
-                if (settings.user != "") username = settings.user else username = System.getenv('BINTRAY_USER')
+                if (settings.user != "") username = settings.username else username = System.getenv('BINTRAY_USER')
                 if (settings.apiKey != "") password = settings.apiKey else password = System.getenv('BINTRAY_API_KEY')
             }
         }
@@ -62,7 +57,7 @@ publishing {
                     from components.java
                     artifact sourcesJar
 
-                    if (project.name.endsWith("-maven-plugin")) {
+                    if (project.name.endsWith('-maven-plugin')) {
                         pom.packaging = 'maven-plugin'
                     }
                 }
@@ -80,7 +75,6 @@ publishing {
     }
 }
 
-// ---- Bintray Settings ----
 class BintraySettings {
     String user = ""
     String apiKey = ""
@@ -91,13 +85,12 @@ class BintraySettings {
 }
 
 BintraySettings fetchBintraySettings() {
-    String filePath = "bintray.properties"
-    Properties properties = Properties()
-    BintraySettings result = BintraySettings()
+    Properties properties = new Properties()
+    File file = file("bintray.properties")
+    BintraySettings result = new BintraySettings()
 
-    if (file(filePath).exists()) {
-        File file = file(filePath)
-        BufferedReader br = BufferedReader(FileReader(file))
+    if (file.exists()) {
+        BufferedReader br = new BufferedReader(new FileReader(file))
         properties.load(br)
         result.user = properties.getProperty("user") ?: ""
         result.apiKey = properties.getProperty("apiKey") ?: ""
