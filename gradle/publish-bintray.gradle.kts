@@ -7,7 +7,7 @@ import java.util.Properties
 // Configures publishing of Maven artifacts to Bintray
 apply(plugin = "maven")
 apply(plugin = "maven-publish")
-apply("gradle/maven-central.gradle")
+apply("${rootProject.projectDir}/gradle/maven-central.gradle")
 
 // todo: figure out how we can check it in a generic way
 val isMultiplatform = project.name == "atomicfu"
