@@ -38,6 +38,7 @@ kotlin {
             addNative(fromPreset(project.ext.ideaPreset, 'native'))
         } else {
             addTarget(presets.linuxX64)
+            addTarget(presets.linuxArm32Hfp)
             addTarget(presets.iosArm64)
             addTarget(presets.iosArm32)
             addTarget(presets.iosX64)
@@ -120,6 +121,7 @@ if (!project.ext.ideaActive) {
 
     registerInteropAsSourceSetOutput(
             kotlin.linuxX64().compilations["main"].cinterops["interop"],
+            kotlin.linuxArm32Hfp().compilations["main"].cinterops["interop"],
             kotlin.sourceSets["nativeInterop"]
     )
 }
